@@ -1,0 +1,950 @@
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_TFTLCD.h> // Hardware-specific library
+#include <TouchScreen.h>
+#include <Fonts/Picopixel.h> //small font
+#include <Fonts/FreeSerif9pt7b.h> //font
+#include <dht.h>
+
+//--------Motor---------------------------------------------------------------
+const int IN1 = 24;
+const int IN2 = 25;
+const int ENA = 45; //Analog Pin
+//-------------Motor End------------------------------------------------------
+
+//----------Peltier------------------------------------------------------------
+#define DHT22_PIN 28          // DHT22 data pin is connected to Arduino pin 8    
+#define DHTTYPE DHT22       // DHT22 sensor is used
+dht DHT;   // Initialize DHT library
+ int AA =  38; //Relay Module Pins 
+ int BB = 39; //Relay Module Pins
+
+
+
+int Tref;
+float Tmeas;
+float Hmeas;
+
+//---------Peltier's END---------------------------------------------------------
+
+ 
+
+
+#define YP A3  // must be an analog pin, use "An" notation!
+#define XM A2  // must be an analog pin, use "An" notation!
+#define YM 9   // can be a digital pin
+#define XP 8   // can be a digital pin
+
+#define TS_MINX 119   //calliberated (by running another code to match touch layer with screen objects)
+#define TS_MINY 78
+#define TS_MAXX 908
+#define TS_MAXY 892
+
+// For better pressure precision, we need to know the resistance
+// between X+ and X- Use any multimeter to read it
+// For the one we're using, its 300 ohms across the X plate
+TouchScreen ts = TouchScreen(XP, YP, XM, YM, 322); //checked, it's 322 for me
+
+#define LCD_CS A3
+#define LCD_CD A2
+#define LCD_WR A1
+#define LCD_RD A0
+// optional
+#define LCD_RESET A4
+
+// Assign human-readable names to some common 16-bit color values:
+#define  BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
+
+
+Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+
+#define BOXSIZE 40
+#define PENRADIUS 3
+int oldcolor, currentcolor;
+
+#define MINPRESSURE 10
+#define MAXPRESSURE 1000
+
+int touch = 0; int x; int y; int inputTemp = 20; int hoursTemp = 12; int minutesTemp = 45; int hoursRain = 12; int minutesRain = 23; int rainRate = 1500; int repeat = 12; int PWM; 
+int currentPage = 0; int unsigned long prevTemp; int a, b, c, d, e; int unsigned long timeRain;int unsigned long timeTemp;
+int unsigned long timer = 0;
+int unsigned long timer1 = 0;
+int unsigned long sampler;
+float t = 0;
+ 
+void mainscreen();
+
+void setup() {
+
+  //Peltier START-----------------------
+   
+   pinMode(AA, OUTPUT);
+   pinMode(BB, OUTPUT);
+  //Peltier END-------------------------
+ 
+  pinMode(XM, OUTPUT);
+  pinMode(YP, OUTPUT);
+  Serial.begin(9600);
+  
+  tft.reset();
+  tft.begin(0x9341); //for my model - ILI9341 Driver
+  tft.setRotation(0); //rotate only AFTER beginnning the tft! -_-
+  tft.fillScreen(BLACK);
+  digitalWrite(BB,HIGH); // turn peltier off
+  
+ mainscreen(); //draws mainscreen
+
+}
+
+void loop() {
+
+  if(currentPage == 0){
+  getTouch(x, y);
+  
+        if(x > 2  && x < 112 && y > 5 && y < 55) //--------------------------Touched "Set Temp"
+          {        //drawing frame only once -- Temp input
+                  resetTouch();
+                  tft.fillScreen(BLACK);
+                  drawBackButton(); 
+                  drawIncreaseButton(50,50);
+                  drawIncreaseButton(100,50);
+                  //-------------------------------------------------
+                  drawDecreaseButton(50,140);
+                  drawDecreaseButton(100,140);
+                  tft.setFont(&FreeSerif9pt7b);
+                  tft.setCursor(40,125);
+                  tft.print(inputTemp); tft.print(" deg C");
+                  currentPage = 1;
+                                
+                  
+         }
+
+        else if(x > 130 && x < 240 && y > 5 && y < 55) //-----------------------------Touched "RunTime for Temp"
+          { 
+                 resetTouch();
+                 tft.fillScreen(BLACK);
+                 drawBackButton();
+                 //for Hours
+                 drawIncreaseButton(10,50);
+                 drawIncreaseButton(70, 50);
+                 drawDecreaseButton(10, 140);
+                 drawDecreaseButton(70, 140);
+                 //for Minutes
+                 drawIncreaseButton(130, 50);
+                 drawIncreaseButton(190, 50);
+                 drawDecreaseButton(130, 140);
+                 drawDecreaseButton(190, 140);
+                 //--------------------------
+                 
+                 tft.setFont(&FreeSerif9pt7b);
+                 tft.setCursor(30,125);
+                 tft.print(hoursTemp); tft.print("  h"); 
+                 tft.setCursor(130, 125);
+                 tft.print(minutesTemp); tft.print("  m");
+                 tft.setFont();
+                 
+
+                 currentPage = 2;
+          }
+
+         else if(x > 2  && x < 112 && y > 70 && y < 120) //--------------------------Touched "RainRate"
+          {        //drawing frame only once -- Rain input
+                  resetTouch();
+                  tft.fillScreen(BLACK);
+                  drawBackButton(); 
+                  drawIncreaseButton(50,50);
+                  drawIncreaseButton(100,50);
+                  //-------------------------------------------------
+                  drawDecreaseButton(50,140);
+                  drawDecreaseButton(100,140);
+                  tft.setFont(&FreeSerif9pt7b);
+                  tft.setCursor(40,125);
+                  tft.print(rainRate); tft.print("   mm/h");
+                  currentPage = 3;
+                                
+                  
+         }
+        else if(x > 130 && x < 240 && y > 70 && y < 120) //-------Touched "RunTime for Rain" 
+          {    
+                  resetTouch();
+                 tft.fillScreen(BLACK);
+                 drawBackButton();
+                 //for Hours
+                 drawIncreaseButton(10,50);
+                 drawIncreaseButton(70, 50);
+                 drawDecreaseButton(10, 140);
+                 drawDecreaseButton(70, 140);
+                 //for Minutes
+                 drawIncreaseButton(130, 50);
+                 drawIncreaseButton(190, 50);
+                 drawDecreaseButton(130, 140);
+                 drawDecreaseButton(190, 140);
+                 //--------------------------
+                 
+                 tft.setFont(&FreeSerif9pt7b);
+                 tft.setCursor(30,125);
+                 tft.print(hoursRain); tft.print("  h"); 
+                 tft.setCursor(130, 125);
+                 tft.print(minutesRain); tft.print("  m");
+                 tft.setFont();
+                 
+
+                 currentPage = 4;
+          }
+
+          else if(x > 70 && x < 180 && y > 130 && y < 160){//touched Repeat Button
+                  resetTouch();
+                  tft.fillScreen(BLACK);
+                  drawBackButton(); 
+                  drawIncreaseButton(50,50);
+                  drawIncreaseButton(100,50);
+                  //-------------------------------------------------
+                  drawDecreaseButton(50,140);
+                  drawDecreaseButton(100,140);
+                  tft.setFont(&FreeSerif9pt7b);
+                  tft.setCursor(40,125);
+                  tft.print(repeat); tft.print("  repitions");
+                currentPage = 5;  
+           }
+
+           else if(x > 10 && x < 230 && y > 230 && y < 310){//touched START button
+                resetTouch();
+               
+               currentPage = 6;
+                
+           }
+ 
+    }
+
+    if(currentPage == 1){//SetTemp Screen
+      
+       getTouch(x, y);
+       setTempTouch(); //function that increments/decrements values based on what button is pressed
+         
+       tft.setFont();
+       pressedBackButton(); //Place AT THE END
+       resetTouch(); 
+    }
+
+     if(currentPage == 2){ //for Runtime of Temp
+        getTouch(x,y);
+        runTimeTempTouch();//function that sets value for time using buttons  
+      tft.setFont();
+      resetTouch();
+      pressedBackButton(); // Place it AT THE END!
+    }
+
+    if(currentPage == 3){//RainRate Screen
+      
+       getTouch(x, y);
+       setRainTouch(); //function that increments/decrements values based on what button is pressed
+         
+       tft.setFont();
+       pressedBackButton(); //Place AT THE END
+       resetTouch(); 
+      
+    }
+    
+     if(currentPage == 4){ //for Runtime of Temp
+        getTouch(x,y);
+        runTimeRainTouch();//function that sets value for time using buttons  
+      tft.setFont();
+      resetTouch();
+      pressedBackButton(); // Place it AT THE END!
+    }
+
+    if(currentPage == 5){
+        getTouch(x,y);
+
+        setRepeatTouch();
+        
+        
+        tft.setFont();
+        resetTouch();
+        pressedBackButton(); //checks if BackButton is pressed (place AT THE END!)  
+    }
+
+    if(currentPage == 6){//Start Button
+      START:
+      drawTempScreen(); //draws the screen
+
+       timeTemp = (3600000*hoursTemp + 60000*minutesTemp);//*1000; problem with two multiplier //Temp Control Time in miliseconds
+       timeRain = (3600000*hoursRain + 60000*minutesRain);//*1000; prob with two multiplier //Rain Control Time in miliseconds
+       timer = millis() + timeTemp; //sets timer for Temp aging
+       sampler = millis(); //initializing such that the following if statement gets true
+
+       Tref = inputTemp; //used input temp for reference temperature in controlTemp function
+      
+      //Start Temp Aging-----------------------------------------------
+     
+        while(timer > millis()){
+          if(sampler < millis()){
+             
+                tft.fillRect(0,90,240,30, BLACK); //erase read Temp
+                tft.fillRect(0,150,240,15,BLACK); //-erase prev text
+                timer1 = timer - millis(); //---keeps track of run-time
+           
+                sampler = millis()+1000; //update after 1 second
+                tft.setCursor(40,90); //keep reprinting the following text
+                tft.setTextColor(WHITE);
+                tft.print(Tmeas); tft.println(" deg C");
+            tft.print("   "); tft.print(Hmeas); tft.print(" %");
+                tft.setCursor(5,150); a = timer1/3600000; //prints current Temp
+                tft.print("Time: "); tft.print(a); tft.print(" h "); tft.print(((timer1-3600000*a)/60000) + 1); tft.print(" m"); //prints remaining time
+            }
+          controlTemp(); //to control the temperature
+            
+            pressedBackButton();
+            if(currentPage == 0){digitalWrite(BB, HIGH); Serial.println("Peltier Stopped"); goto SKIP;} //check if back was pressed and stop peltier if yes ans exit
+        }
+        Serial.println("Peltier Stopped");  
+        digitalWrite(BB, HIGH); //Stop Peltier
+        //End of While Loop (end of Temp Aging)
+        
+   
+        //Start of Rain Aging-----------------------------
+        timer = millis() + timeRain; //Now for Rain Output-------
+        tft.fillScreen(BLACK);
+        drawBackButton();
+        tft.setCursor(5,40);
+        tft.println("Now, raining at");
+        tft.print("    "); tft.print(rainRate); tft.println(" mm/hour");
+        PWM = 0.1117*(rainRate) - 56.35; //Linear Regression Model based on real aquired data (with good linear fit) that relates rainRate with PWM value
+        Serial.println(PWM);
+        runMotors(PWM); //PWM 
+        timer1 = timer - millis(); //-------------just placing before to get printed in loop the first time
+        tft.setCursor(5,80);
+        a = timer1/3600000;
+            tft.print("Time: "); tft.print(a); tft.print(" h "); tft.print(((timer1-3600000*a)/60000) + 1); tft.print(" m");
+        while(timer > millis()){
+            
+            if(sampler < millis()){
+                
+               tft.fillRect(0,80,240,15,BLACK);//---erase prev text
+                timer1 = timer - millis();
+                tft.setTextColor(WHITE);
+                tft.setCursor(5,80);
+                a = timer1/3600000;
+            tft.print("Time: "); tft.print(a); tft.print(" h "); tft.print(((timer1-3600000*a)/60000) + 1); tft.print(" m");
+                sampler = millis() + 2000; //update after 2 sec  
+            }
+            
+            pressedBackButton();
+            if(currentPage == 0){stopMotors; goto SKIP;}
+        }
+        stopMotors();
+        repeat = repeat - 1; //decremeant repeat
+        if(repeat >= 0){ goto START;} //for repeat
+        currentPage = 0; //aging done!
+        mainscreen(); //draw home screen
+    SKIP:    
+        pressedBackButton();  
+    }
+    
+};
+void getTouch(int &x, int &y){//---------Get Touch Co-ordinates
+            TSPoint p = ts.getPoint();
+            pinMode(XM, OUTPUT);
+            pinMode(YP, OUTPUT);
+         if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+              p.x = map(p.x, TS_MINX, TS_MAXX, tft.width(), 0);
+              p.y = map(p.y, TS_MINY, TS_MAXY, tft.height(), 0);
+     
+        x = p.x;
+        y = p.y;
+      } 
+      
+      
+               
+};
+
+void drawBackButton(){
+                  tft.fillRoundRect(2,2, 70,30, 8, BLUE);
+                  tft.setTextColor(WHITE);
+                  tft.setCursor(5,8);
+                  tft.println("<BACK");  
+};
+
+void pressedBackButton(){
+       
+       //-------------TOUCH BACK BUTTON            
+         TSPoint p = ts.getPoint();
+            pinMode(XM, OUTPUT);
+            pinMode(YP, OUTPUT);
+         if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+              p.x = map(p.x, TS_MINX, TS_MAXX, tft.width(), 0);
+              p.y = map(p.y, TS_MINY, TS_MAXY, tft.height(), 0);
+                  if (p.x > 0 && p.x < 72) {
+      if (p.y > 0 && p.y < 32) {
+         mainscreen();
+         touch = 0;
+        currentPage = 0;
+       
+          //BACK Button
+        
+      }}} 
+      //---------------------------------   
+};
+  
+void mainscreen(){
+  //240x320
+  //SetTemp Button ----(40, 30 to 210, 90)
+  tft.fillScreen(BLACK);
+   tft.fillRoundRect(2, 5, 110, 50, 8, CYAN);  // Round Rect(x, y, w, h, radius = 5, color), Rect(x,y,w,h,color)
+  tft.drawRoundRect(2, 5, 110, 50, 8, WHITE); 
+   tft.setCursor(10,20); //w+5, h+7
+  tft.setTextSize(2);
+  tft.setTextColor(BLACK);
+  tft.print("Set Temp");
+  
+  //Run-Time Button for Temp ----------------------
+   tft.fillRoundRect(130, 5, 110, 50, 8, CYAN);  // Round Rect(x, y, w, h, radius = 5, color), Rect(x,y,w,h,color)
+  tft.drawRoundRect(130, 5, 110, 50, 8, WHITE); 
+  tft.setCursor(145, 20);
+  tft.print("Runtime");
+  
+
+   //Set Rain-Rate Button ----(40, 30 to 210, 90)
+   tft.fillRoundRect(2, 70, 110, 50, 8, CYAN);  // Round Rect(x, y, w, h, radius = 5, color), Rect(x,y,w,h,color)
+  tft.drawRoundRect(2, 70, 110, 50, 8, WHITE); 
+   tft.setCursor(10,80); //w+5, h+7
+  tft.println("Set Rain");
+  tft.print("   Rate");
+  
+  //Run-Time Button for Rain ----------------------
+   tft.fillRoundRect(130, 70, 110, 50, 8, CYAN);  // Round Rect(x, y, w, h, radius = 5, color), Rect(x,y,w,h,color)
+  tft.drawRoundRect(130, 70, 110, 50, 8, WHITE); 
+  tft.setCursor(145, 85);
+  tft.print("Runtime");
+  
+  //Lines (Dividers) -----------------------
+  tft.drawLine(0,62, 240, 62, WHITE);
+  tft.drawLine(0,125, 240, 125, WHITE);
+
+  //Display Values-------------------------
+  tft.setTextColor(WHITE);
+  tft.setCursor(2, 165);  tft.print(inputTemp); tft.setFont(&Picopixel); tft.print(" o"); tft.setFont(); tft.print("C for "); tft.print(hoursTemp); tft.print("h "); tft.print(minutesTemp); tft.println("m");
+  tft.print(rainRate); tft.print("mm/h for "); tft.print(hoursRain); tft.print("h "); tft.print(minutesRain); tft.println("m");
+  tft.print("It repeats "); tft.print(repeat); tft.println(" times.");
+  tft.setTextColor(BLACK);
+
+ 
+ //Repeat Button----------------------------- 
+ tft.fillRoundRect(70,130,110, 30, 8, CYAN);
+ tft.drawRoundRect(70,130,110, 30, 8, WHITE);
+ tft.setCursor(75,137); tft.print(" Repeat");
+
+ //START Button------------------------------
+ tft.fillRoundRect(10, 230, 220, 80, 50, GREEN);
+ tft.setCursor(60,270);
+ tft.setFont(&FreeSerif9pt7b);
+ tft.print("START");
+ tft.setFont();
+
+ };
+
+ void drawDecreaseButton(int x, int y){
+              tft.fillRoundRect(x, y, 40, 40, 8, CYAN);
+              tft.fillTriangle(x+5,y+5, x+(40/2), y+40-5, x+40-5, y+5, BLACK); //Decrease Button  
+};
+
+ void drawIncreaseButton(int x, int y){
+              tft.fillRoundRect(x, y, 40, 40, 8, CYAN);
+              tft.fillTriangle(x+5,y+40-5, x+(40/2), y+5, x+40-5, y+40-5, BLACK); //Decrease Button  
+};
+
+void resetTouch(){
+    x = -1;
+    y = -1;  
+};
+
+void setTempTouch(){
+    if(x > 50 && x < 90 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(inputTemp);
+            inputTemp = inputTemp + 10; //increment by 10
+            if(inputTemp > 60){inputTemp = 60;} //limits values to 60
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(inputTemp);
+             delay(500); //so that it doesn't read too quickly
+          }
+
+         if(x > 100 && x < 140 && y > 50 && y < 90){//For Increasing by 1
+            
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(inputTemp);
+             inputTemp = inputTemp + 1;  //increment by 1
+            if(inputTemp > 60){inputTemp = 60;} //limits value to 60
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(inputTemp);
+             delay(500); //so that it doesn't read too quickly
+          }
+         if(x > 50 && x < 90 && y > 140 && y < 180){//For Decreasing by 10
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(inputTemp);
+             inputTemp = inputTemp - 10;  //decrement by 10
+            if(inputTemp < 10){inputTemp = 10;} //limits value to 10
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(inputTemp);
+             delay(500); //so that it doesn't read too quickly
+            }
+          if(x > 100 && x < 140 && y > 140 && y < 180){//For Decreasing by 1
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(inputTemp);
+             inputTemp = inputTemp - 1; //decrement by 1
+            if(inputTemp < 10){inputTemp = 10;} //limits value to 10
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(inputTemp);
+             delay(500); //so that it doesn't read too quickly
+            }   
+};
+
+void runTimeTempTouch(){
+    if(x > 10 && x < 50 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursTemp);
+            hoursTemp = hoursTemp + 10; //increment by 10
+            if(hoursTemp > 23){hoursTemp = 23;} //limits values to 23
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursTemp);
+             delay(500); //so that it doesn't read too quickly
+           } 
+
+           if(x > 70 && x < 110 && y > 50 && y < 90){ //For Increasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursTemp);
+            hoursTemp = hoursTemp + 1; //increment by 1
+            if(hoursTemp > 23){hoursTemp = 23;} //limits values to 23
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursTemp);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 130 && x < 170 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesTemp);
+            minutesTemp = minutesTemp + 10; //increment by 10
+            if(minutesTemp > 59){minutesTemp = 59;} //limits values to 59
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesTemp);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 190 && x < 230 && y > 50 && y < 90){ //For Increasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesTemp);
+            minutesTemp = minutesTemp + 1; //increment by 1
+            if(minutesTemp > 59){minutesTemp = 59;} //limits values to 59
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesTemp);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 10 && x < 50 && y > 140 && y < 180){ //For Decreasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursTemp);
+            hoursTemp = hoursTemp - 10; //decrement by 10
+            if(hoursTemp < 0){hoursTemp = 0;} //limits values to 0
+            if(hoursTemp == 0){if(minutesTemp < 1){minutesTemp = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursTemp);
+             delay(500); //so that it doesn't read too quickly
+           } 
+
+           if(x > 70 && x < 110 && y > 140 && y < 180){ //For Decreasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursTemp);
+            hoursTemp = hoursTemp - 1; //decrement by 1
+            if(hoursTemp < 0){hoursTemp = 0;} //limits values to 0
+            if(hoursTemp == 0){if(minutesTemp < 1){minutesTemp = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursTemp);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 130 && x < 170 && y > 140 && y < 180){ //For Decreasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesTemp);
+            minutesTemp = minutesTemp - 10; //decrement by 10
+            if(hoursTemp > 0){if(minutesTemp < 1){minutesTemp = 0;}} //limits values to 0 if hour is > 0
+            if(hoursTemp == 0){if(minutesTemp < 1){minutesTemp = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesTemp);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 190 && x < 230 && y > 140 && y < 180){ //For Decreasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesTemp);
+            minutesTemp = minutesTemp - 1; //decrement by 1
+            if(hoursTemp > 0){if(minutesTemp < 1){minutesTemp = 0;}} //limits values to 0 if hour is > 0
+            if(hoursTemp == 0){if(minutesTemp < 1){minutesTemp = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesTemp);
+             delay(500); //so that it doesn't read too quickly
+           }  
+};
+
+void runTimeRainTouch(){
+    if(x > 10 && x < 50 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursRain);
+            hoursRain = hoursRain + 10; //increment by 10
+            if(hoursRain > 23){hoursRain = 23;} //limits values to 23
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursRain);
+             delay(500); //so that it doesn't read too quickly
+           } 
+
+           if(x > 70 && x < 110 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursRain);
+            hoursRain = hoursRain + 1; //increment by 1
+            if(hoursRain > 23){hoursRain = 23;} //limits values to 23
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursRain);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 130 && x < 170 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesRain);
+            minutesRain = minutesRain + 10; //increment by 10
+            if(minutesRain > 59){minutesRain = 59;} //limits values to 59
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesRain);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 190 && x < 230 && y > 50 && y < 90){ //For Increasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesRain);
+            minutesRain = minutesRain + 1; //increment by 1
+            if(minutesRain > 59){minutesRain = 59;} //limits values to 59
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesRain);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 10 && x < 50 && y > 140 && y < 180){ //For Decreasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursRain);
+            hoursRain = hoursRain - 10; //decrement by 10
+            if(hoursRain < 0){hoursRain = 0;} //limits values to 0
+            if(hoursRain == 0){if(minutesRain < 1){minutesRain = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursRain);
+             delay(500); //so that it doesn't read too quickly
+           } 
+
+           if(x > 70 && x < 110 && y > 140 && y < 180){ //For Decreasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(30,125);
+             tft.setTextColor(BLACK);
+             tft.print(hoursRain);
+            hoursRain = hoursRain - 1; //decrement by 1
+            if(hoursRain < 0){hoursRain = 0;} //limits values to 0
+            if(hoursRain == 0){if(minutesRain < 1){minutesRain = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(30,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(hoursRain);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 130 && x < 170 && y > 140 && y < 180){ //For Decreasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesRain);
+            minutesRain = minutesRain - 10; //decrement by 10
+            if(hoursRain > 0){if(minutesRain < 1){minutesRain = 0;}} //limits values to 0 if hour is > 0
+            if(hoursRain == 0){if(minutesRain < 1){minutesRain = 1;}} //limites to 1 min if hour is 0
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesRain);
+             delay(500); //so that it doesn't read too quickly
+           }
+
+           if(x > 190 && x < 230 && y > 140 && y < 180){ //For Decreasing by 1
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(130, 125);
+             tft.setTextColor(BLACK);
+             tft.print(minutesRain);
+            minutesRain = minutesRain - 1; //decrement by 1
+            if(hoursRain > 0){if(minutesRain < 1){minutesRain = 0;}} //limits values to 0 if hour is > 0
+            if(hoursRain == 0){if(minutesRain < 1){minutesRain = 1;}} //limites to 1 min if hour is 0
+            
+              
+            tft.setCursor(130, 125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(minutesRain);
+             delay(500); //so that it doesn't read too quickly
+           }  
+};
+
+void setRainTouch(){
+    if(x > 50 && x < 90 && y > 50 && y < 90){ //For Increasing by 100
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(rainRate);
+            rainRate = rainRate + 100; //increment by 100
+            if(rainRate > 2790){rainRate = 2790;} //limits values to 2790
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(rainRate);
+             delay(500); //so that it doesn't read too quickly
+          }
+
+         if(x > 100 && x < 140 && y > 50 && y < 90){//For Increasing by 10
+            
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(rainRate);
+             rainRate = rainRate + 10;  //increment by 10
+            if(rainRate > 2790){rainRate = 2790;} //limits values to 2790
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(rainRate);
+             delay(500); //so that it doesn't read too quickly
+          }
+         if(x > 50 && x < 90 && y > 140 && y < 180){//For Decreasing by 100
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(rainRate);
+             rainRate = rainRate - 100;  //decrement by 100
+            if(rainRate < 1400){rainRate = 1400;} //limits value to 1400
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(rainRate);
+             delay(500); //so that it doesn't read too quickly
+            }
+          if(x > 100 && x < 140 && y > 140 && y < 180){//For Decreasing by 10
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(rainRate);
+             rainRate = rainRate - 10; //decrement by 10
+            if(rainRate < 1400){rainRate = 1400;} //limits value to 1400
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(rainRate);
+             delay(500); //so that it doesn't read too quickly
+            }   
+};
+
+void setRepeatTouch(){
+    if(x > 50 && x < 90 && y > 50 && y < 90){ //For Increasing by 10
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(repeat);
+            repeat = repeat + 10; //increment by 10
+            if(repeat > 25){repeat = 25;} //limits values to 25
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(repeat);
+             delay(500); //so that it doesn't read too quickly
+          }
+
+         if(x > 100 && x < 140 && y > 50 && y < 90){//For Increasing by 1
+            
+             tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(repeat);
+             repeat = repeat + 1;  //increment by 1
+            if(repeat > 25){repeat = 25;} //limits value to 25
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(repeat);
+             delay(500); //so that it doesn't read too quickly
+          }
+         if(x > 50 && x < 90 && y > 140 && y < 180){//For Decreasing by 10
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(repeat);
+             repeat = repeat - 10;  //decrement by 10
+            if(repeat < 0){repeat = 0;} //limits value to 0
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(repeat);
+             delay(500); //so that it doesn't read too quickly
+            }
+          if(x > 100 && x < 140 && y > 140 && y < 180){//For Decreasing by 1
+            tft.setFont(&FreeSerif9pt7b); //Erase previous text
+             tft.setCursor(40,125);
+             tft.setTextColor(BLACK);
+             tft.print(repeat);
+             repeat = repeat - 1; //decrement by 1
+            if(repeat < 0){repeat = 0;} //limits value to 0
+            tft.setCursor(40,125); //rewrite new value
+              tft.setTextColor(WHITE);
+             tft.print(repeat);
+             delay(500); //so that it doesn't read too quickly
+            }     
+};
+
+void drawTempScreen(){
+    tft.fillScreen(BLACK);
+               
+               drawBackButton();
+                
+            tft.setTextColor(WHITE);
+            tft.setCursor(5,40);
+            tft.print("Set Temp = ");
+            tft.print(inputTemp); tft.println(" C");
+            tft.print("Current Temp:");
+            tft.setCursor(40,90);
+            int chk = DHT.read22(DHT22_PIN);
+            Tmeas = DHT.temperature;
+            Hmeas = DHT.humidity; //update humidity
+            tft.print(Tmeas); tft.println(" deg C");
+            tft.print("   "); tft.print(Hmeas); tft.print(" %"); 
+};
+
+void controlTemp(){
+  int chk = DHT.read22(DHT22_PIN);
+  Tmeas = DHT.temperature;
+  Hmeas = DHT.humidity;
+  
+   if( Tmeas > Tref + 2) //run if actual temp is higher than setTemp by 2 degree
+       {
+            //positive voltage ----Cooling
+          while(Tmeas > Tref - 1){  //Run until Temp is cooled below set temp by 1 degree
+             //positive voltage ---cooling  
+             int chk = DHT.read22(DHT22_PIN);
+             Hmeas = DHT.humidity; //update humidity
+             Tmeas = DHT.temperature; //update temp within the loop
+            digitalWrite(BB,LOW);
+            digitalWrite(AA,HIGH); 
+            Serial.print(Tmeas);
+            Serial.println("Cooling"); //Add TFT update here 
+            updateTempScreen(); //updates Temp and Time values on screen
+            if(timer < millis()){break;} //leave if time's up
+            pressedBackButton(); //check if back was pressed
+            if(currentPage == 0){break;}
+            }
+              
+       }
+  
+    else if( Tmeas < Tref - 2) //run if actual temp is lower than setTemp by 2 degree
+      {
+          //negative voltage ---Heating
+        while(Tmeas < Tref + 1){  //Run until Temp is heated above set temp by 1 degree 
+          int chk = DHT.read22(DHT22_PIN);
+          Tmeas = DHT.temperature;  //update temp within the loop   
+          Hmeas = DHT.humidity; //update humidity
+          digitalWrite(AA,LOW);
+          digitalWrite(BB,LOW);
+          Serial.print(Tmeas);
+          Serial.println("Heating");
+          updateTempScreen(); //updates Temp and Time values on screen
+          if(timer < millis()){break;} //leave if time's up
+          pressedBackButton(); //check if back was pressed
+            if(currentPage == 0){break;} 
+          }
+        }
+        else //if temp is within range by 2 degree, don't run
+        {
+          int chk = DHT.read22(DHT22_PIN);
+          Tmeas = DHT.temperature;  //update temp within the loop 
+          Hmeas = DHT.humidity; //update humidity
+          digitalWrite(BB,HIGH); // turn peltier off
+          Serial.print(Tmeas);
+          Serial.println("OFF");
+          updateTempScreen(); //updates Temp and Time values on screen
+          pressedBackButton(); //check if back was pressed
+        }
+          
+};
+
+void updateTempScreen(){
+    if(sampler < millis()){
+             
+                tft.fillRect(0,90,240,30, BLACK); //erase read Temp
+                tft.fillRect(0,150,240,15,BLACK); //-erase prev text
+                timer1 = timer - millis(); //---keeps track of run-time
+           
+                sampler = millis()+1000; //update after 1 second
+                tft.setCursor(40,90); //keep reprinting the following text
+                tft.setTextColor(WHITE);
+                tft.print(Tmeas); tft.println(" deg C");
+            tft.print("   "); tft.print(Hmeas); tft.print(" %");
+                tft.setCursor(5,150); a = timer1/3600000; //prints current Temp
+                tft.print("Time: "); tft.print(a); tft.print(" h "); tft.print(((timer1-3600000*a)/60000) + 1); tft.print(" m"); //prints remaining time
+    }  
+};
+
+void runMotors(int PWM){
+    analogWrite(ENA, PWM);
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+};
+
+void stopMotors(){
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);  
+};
+
+
